@@ -1,0 +1,31 @@
+{
+  "name": "@chainlink/docs-ccip",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "clean": "npm run clean:foundry && npm run clean:hardhat",
+    "build": "npm run build:foundry && npm run build:hardhat",
+    "clean:foundry": "forge clean",
+    "clean:hardhat": "hardhat clean",
+    "build:foundry": "forge build",
+    "build:hardhat": "hardhat build",
+    "test:foundry": "forge test",
+    "test:hardhat": "hardhat test"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "1.5.0",
+    "@chainlink/contracts-ccip": "2.0.0-beta.0",
+    "@openzeppelin/contracts": "5.3.0"
+  },
+  "devDependencies": {
+    "@chainlink/ccip-sdk": "^1.5.1",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",
+    "@types/node": "^22.19.11",
+    "dotenv": "^17.2.4",
+    "hardhat": "^3.0.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.45.3"
+  }
+}

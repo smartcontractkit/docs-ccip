@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Foundry
+cache/
+out/
+broadcast/
+lib/
+
+# Hardhat
+cache_hardhat/
+artifacts/
+typechain-types/
+types/
+
+# Docs
+docs/
+
+# Environment
+.env
+
+# MacOS files
+.DS_Store
