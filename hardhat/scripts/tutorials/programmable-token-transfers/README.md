@@ -102,7 +102,7 @@ Sets up the allowlists on both chains:
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/programmable-token-transfers/configure/configure.ts
 ```
 
@@ -118,7 +118,7 @@ To allow messages in the opposite direction:
 SOURCE_CHAIN=MANTLE_SEPOLIA \
 DEST_CHAIN=ETHEREUM_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/programmable-token-transfers/configure/configure.ts
 ```
 

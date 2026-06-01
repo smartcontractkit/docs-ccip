@@ -102,7 +102,7 @@ contract Deploy is Script {
                 sourceChainName,
                 " DEST_CHAIN=",
                 destChainName,
-                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10",
+                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32",
                 " forge script foundry/scripts/tutorials/send-arbitrary-data/configure/Configure.s.sol:Configure --account $KEYSTORE_NAME --broadcast -vv"
             )
         );
@@ -114,7 +114,7 @@ contract Deploy is Script {
                 destChainName,
                 " DEST_CHAIN=",
                 sourceChainName,
-                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10",
+                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32",
                 " forge script foundry/scripts/tutorials/send-arbitrary-data/configure/Configure.s.sol:Configure --account $KEYSTORE_NAME --broadcast -vv"
             )
         );

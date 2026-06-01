@@ -93,7 +93,7 @@ Sets the allowed receiver on `USDCSender` and the allowed sender + finality conf
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=INK_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/transfer-usdc-with-data/configure/configure.ts
 ```
 
@@ -108,7 +108,7 @@ DEST_CHAIN=INK_SEPOLIA \
 FEE_TOKEN=LINK \
 BENEFICIARY=<beneficiary_address> \
 USDC_AMOUNT=1000000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/transfer-usdc-with-data/interact/send-message.ts
 ```
 
@@ -118,7 +118,7 @@ SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=INK_SEPOLIA \
 BENEFICIARY=<beneficiary_address> \
 USDC_AMOUNT=1000000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/transfer-usdc-with-data/interact/send-message.ts
 ```
 

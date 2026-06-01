@@ -141,7 +141,7 @@ async function main() {
   console.log("** Next Step: Configuration **");
   console.log("");
   console.log(
-    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10 ` +
+    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32 ` +
     `npx hardhat run hardhat/scripts/tutorials/transfer-usdc-with-data/configure/configure.ts`
   );
   console.log("========================================");

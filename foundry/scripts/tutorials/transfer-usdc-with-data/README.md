@@ -97,7 +97,7 @@ Sets the allowed receiver on `USDCSender` and the allowed sender + finality conf
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/transfer-usdc-with-data/configure/Configure.s.sol:Configure \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -114,7 +114,7 @@ DEST_CHAIN=MANTLE_SEPOLIA \
 FEE_TOKEN=LINK \
 BENEFICIARY=<beneficiary_address> \
 USDC_AMOUNT=1000000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/transfer-usdc-with-data/interact/SendMessage.s.sol:SendMessage \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -126,7 +126,7 @@ SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 BENEFICIARY=<beneficiary_address> \
 USDC_AMOUNT=1000000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/transfer-usdc-with-data/interact/SendMessage.s.sol:SendMessage \
   --account $KEYSTORE_NAME \
   --broadcast -vv

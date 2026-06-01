@@ -117,7 +117,7 @@ async function main() {
   console.log("");
   console.log("Configure both contracts with a single command:");
   console.log(
-    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data-and-receive-transfer-confirmation/configure/configure.ts`
+    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data-and-receive-transfer-confirmation/configure/configure.ts`
   );
   console.log("========================================");
   console.log("");

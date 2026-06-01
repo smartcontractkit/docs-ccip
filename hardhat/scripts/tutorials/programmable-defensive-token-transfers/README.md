@@ -84,7 +84,7 @@ This automatically enables `setSimRevert(true)` on the destination to simulate f
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts
 ```
 
@@ -94,7 +94,7 @@ npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers
 SOURCE_CHAIN=MANTLE_SEPOLIA \
 DEST_CHAIN=ETHEREUM_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts
 ```
 
@@ -107,7 +107,7 @@ DEST_CHAIN=MANTLE_SEPOLIA \
 FEE_TOKEN=LINK \
 TOKEN_AMOUNT=1000000000000000 \
 GAS_LIMIT=400000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE='Hello World From Hardhat Script for CCIP 2.0!' \
 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/interact/send-message.ts
 ```
@@ -118,7 +118,7 @@ SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 TOKEN_AMOUNT=1000000000000000 \
 GAS_LIMIT=400000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE='Hello World From Hardhat Script for CCIP 2.0!' \
 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/interact/send-message.ts
 ```

@@ -22,7 +22,7 @@ pragma solidity 0.8.24;
 // │                                                                             │
 // │  Usage:                                                                     │
 // │    SOURCE_CHAIN=ETHEREUM_SEPOLIA DEST_CHAIN=ARBITRUM_SEPOLIA \              │
-// │    FEE_TOKEN=LINK GAS_LIMIT=200000 BLOCK_DEPTH=10 \                        │
+// │    FEE_TOKEN=LINK GAS_LIMIT=200000 BLOCK_DEPTH=32 \                        │
 // │    forge script interact/TestOutOfOrderExecution.s.sol \                   │
 // │      --account $KEYSTORE_NAME --broadcast -vv                               │
 // └─────────────────────────────────────────────────────────────────────────────┘

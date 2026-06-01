@@ -123,7 +123,7 @@ contract Deploy is Script {
                 sourceChainName,
                 " DEST_CHAIN=",
                 destChainName,
-                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10",
+                " ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32",
                 " forge script foundry/scripts/tutorials/send-arbitrary-data-and-receive-transfer-confirmation/configure/Configure.s.sol:Configure --account $KEYSTORE_NAME --broadcast -vv"
             )
         );
