@@ -91,7 +91,7 @@ Configure sender and receiver on both chains:
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/send-arbitrary-data/configure/Configure.s.sol:Configure \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -103,7 +103,7 @@ forge script foundry/scripts/tutorials/send-arbitrary-data/configure/Configure.s
 SOURCE_CHAIN=MANTLE_SEPOLIA \
 DEST_CHAIN=ETHEREUM_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/send-arbitrary-data/configure/Configure.s.sol:Configure \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -117,7 +117,7 @@ SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 FEE_TOKEN=LINK \
 GAS_LIMIT=200000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE="Hello World From Foundry Script for CCIP 2.0!" \
 forge script foundry/scripts/tutorials/send-arbitrary-data/interact/SendMessage.s.sol:SendMessage \
   --account $KEYSTORE_NAME \
@@ -129,7 +129,7 @@ forge script foundry/scripts/tutorials/send-arbitrary-data/interact/SendMessage.
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 GAS_LIMIT=200000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE="Hello World From Foundry Script for CCIP 2.0!" \
 forge script foundry/scripts/tutorials/send-arbitrary-data/interact/SendMessage.s.sol:SendMessage \
   --account $KEYSTORE_NAME \

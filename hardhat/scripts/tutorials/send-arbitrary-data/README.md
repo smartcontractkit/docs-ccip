@@ -83,7 +83,7 @@ export ETHEREUM_SEPOLIA_CONTRACT=0x... && export MANTLE_SEPOLIA_CONTRACT=0x...
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/configure/configure.ts
 ```
 
@@ -93,7 +93,7 @@ npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/configure/configur
 SOURCE_CHAIN=MANTLE_SEPOLIA \
 DEST_CHAIN=ETHEREUM_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/configure/configure.ts
 ```
 
@@ -105,7 +105,7 @@ SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 FEE_TOKEN=LINK \
 GAS_LIMIT=200000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE="Hello World From Hardhat Script for CCIP 2.0!" \
 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/interact/send-message.ts
 ```
@@ -115,7 +115,7 @@ npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/interact/send-mess
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 GAS_LIMIT=200000 \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 MESSAGE="Hello World From Hardhat Script for CCIP 2.0!" \
 npx hardhat run hardhat/scripts/tutorials/send-arbitrary-data/interact/send-message.ts
 ```

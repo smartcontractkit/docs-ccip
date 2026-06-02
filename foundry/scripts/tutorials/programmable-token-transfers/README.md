@@ -91,7 +91,7 @@ Configure sender and receiver on both chains. This step allowlists the destinati
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/programmable-token-transfers/configure/Configure.s.sol:Configure \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -103,7 +103,7 @@ forge script foundry/scripts/tutorials/programmable-token-transfers/configure/Co
 SOURCE_CHAIN=MANTLE_SEPOLIA \
 DEST_CHAIN=ETHEREUM_SEPOLIA \
 ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH \
-ALLOWED_BLOCK_DEPTH=10 \
+ALLOWED_BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/programmable-token-transfers/configure/Configure.s.sol:Configure \
   --account $KEYSTORE_NAME \
   --broadcast -vv
@@ -248,7 +248,7 @@ Example with block depth:
 ```bash
 SOURCE_CHAIN=ETHEREUM_SEPOLIA \
 DEST_CHAIN=MANTLE_SEPOLIA \
-BLOCK_DEPTH=10 \
+BLOCK_DEPTH=32 \
 forge script foundry/scripts/tutorials/programmable-token-transfers/interact/SendMessage.s.sol:SendMessage \
   --account $KEYSTORE_NAME \
   --broadcast -vv

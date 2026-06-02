@@ -99,12 +99,12 @@ async function main() {
   console.log("");
   console.log("Configure both chains (sender and receiver) with a single command:");
   console.log(
-    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts`
+    `SOURCE_CHAIN=${sourceChainName} DEST_CHAIN=${destChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts`
   );
   console.log("");
   console.log("For bidirectional messaging (send from destination back to source), also run:");
   console.log(
-    `SOURCE_CHAIN=${destChainName} DEST_CHAIN=${sourceChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=10 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts`
+    `SOURCE_CHAIN=${destChainName} DEST_CHAIN=${sourceChainName} ALLOWED_FINALITY_CONFIG=BLOCK_DEPTH ALLOWED_BLOCK_DEPTH=32 npx hardhat run hardhat/scripts/tutorials/programmable-defensive-token-transfers/configure/configure.ts`
   );
   console.log("========================================");
   console.log("");
