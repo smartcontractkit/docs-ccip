@@ -24,6 +24,7 @@ contract Messenger is CCIPReceiver, OwnerIsCreator {
     error SenderNotAllowedForChain(uint64 sourceChainSelector, address sender);
     error InvalidReceiverAddress();
     error InsufficientNativeForFees(uint256 provided, uint256 required);
+    error InvalidOptionalCcvThreshold(uint8 threshold, uint256 optionalCount);
 
     event MessageSent(
         bytes32 indexed messageId,
@@ -38,6 +39,10 @@ contract Messenger is CCIPReceiver, OwnerIsCreator {
 
     event AllowedFinalityConfigSet(uint64 indexed sourceChainSelector, bytes4 allowedFinalityConfig);
 
+    event CCVsSet(
+        uint64 indexed sourceChainSelector, address[] requiredCCVs, address[] optionalCCVs, uint8 optionalThreshold
+    );
+
     bytes32 private s_lastReceivedMessageId;
     address private s_lastReceivedSender;
     string private s_lastReceivedText;
@@ -45,6 +50,9 @@ contract Messenger is CCIPReceiver, OwnerIsCreator {
     mapping(uint64 => bool) public allowlistedDestinationChains;
     mapping(uint64 => mapping(address => bool)) public allowlistedChainSenders;
     mapping(uint64 => bytes4) private s_allowedFinalityConfig;
+    mapping(uint64 => address[]) private s_requiredCCVs;
+    mapping(uint64 => address[]) private s_optionalCCVs;
+    mapping(uint64 => uint8) private s_optionalThreshold;
 
     /// @notice Constructor initializes the contract with the router address.
     /// @param _router The address of the router contract.
@@ -113,6 +121,28 @@ contract Messenger is CCIPReceiver, OwnerIsCreator {
         emit AllowedFinalityConfigSet(_sourceChainSelector, _allowedFinalityConfig);
     }
 
+    /// @notice Sets required and optional CCVs for messages from a given source chain.
+    /// @dev Callable only by the owner. Stored values are returned to the OffRamp via
+    ///      getCCVsAndFinalityConfig when the sender is allowlisted.
+    /// @param _sourceChainSelector The source chain selector.
+    /// @param _requiredCCVs CCV addresses that must attest for the message to be accepted.
+    /// @param _optionalCCVs CCV addresses from which a quorum may be selected.
+    /// @param _optionalThreshold Minimum number of optional CCVs that must attest.
+    function setCCVs(
+        uint64 _sourceChainSelector,
+        address[] calldata _requiredCCVs,
+        address[] calldata _optionalCCVs,
+        uint8 _optionalThreshold
+    ) external onlyOwner {
+        if (_optionalThreshold > _optionalCCVs.length) {
+            revert InvalidOptionalCcvThreshold(_optionalThreshold, _optionalCCVs.length);
+        }
+        s_requiredCCVs[_sourceChainSelector] = _requiredCCVs;
+        s_optionalCCVs[_sourceChainSelector] = _optionalCCVs;
+        s_optionalThreshold[_sourceChainSelector] = _optionalThreshold;
+        emit CCVsSet(_sourceChainSelector, _requiredCCVs, _optionalCCVs, _optionalThreshold);
+    }
+
     /// @notice Returns CCVs and the allowed finality config for the given source chain and sender.
     /// @dev Called by the OffRamp via _getCCVsFromReceiver. Reverts if the sender is not allowlisted.
     /// @param sourceChainSelector The source chain selector.
@@ -133,9 +163,9 @@ contract Messenger is CCIPReceiver, OwnerIsCreator {
             revert SenderNotAllowedForChain(sourceChainSelector, decodedSender);
         }
 
-        requiredCCVs = new address[](0);
-        optionalCCVs = new address[](0);
-        optionalThreshold = 0;
+        requiredCCVs = s_requiredCCVs[sourceChainSelector];
+        optionalCCVs = s_optionalCCVs[sourceChainSelector];
+        optionalThreshold = s_optionalThreshold[sourceChainSelector];
         allowedFinalityConfig = s_allowedFinalityConfig[sourceChainSelector];
     }
 

@@ -10,6 +10,28 @@ import {ExtraArgsHelper} from "../../helper/ExtraArgsHelper.s.sol";
 contract Configure is ExtraArgsHelper {
     HelperConfig public helperConfig;
 
+    /// @dev Configures receiver CCVs from env vars. Returns true if CCVs were actually set
+    ///      (i.e. setCCVs was called), false if all CCV env vars were unset and setCCVs was skipped.
+    function _setCCVs(Messenger receiver, uint64 sourceChainSelector) internal returns (bool configured) {
+        address[] memory requiredCCVs = _parseRequiredCcvs();
+        address[] memory optionalCCVs = _parseOptionalCcvs();
+        uint8 optionalThreshold = _parseOptionalCcvThreshold();
+
+        if (requiredCCVs.length == 0 && optionalCCVs.length == 0 && optionalThreshold == 0) {
+            console.log(
+                unicode"No receiver CCVs configured (REQUIRED_CCV_ADDRESSES / OPTIONAL_CCV_ADDRESSES unset) — skipping setCCVs."
+            );
+            return false;
+        }
+
+        require(optionalThreshold <= optionalCCVs.length, "OPTIONAL_CCV_THRESHOLD exceeds OPTIONAL_CCV_ADDRESSES count");
+
+        console.log("Setting receiver CCVs...");
+        receiver.setCCVs(sourceChainSelector, requiredCCVs, optionalCCVs, optionalThreshold);
+        console.log(unicode"✅ Receiver CCVs configured.");
+        return true;
+    }
+
     function run() external {
         string memory sourceChainName = vm.envString("SOURCE_CHAIN");
         string memory destChainName = vm.envString("DEST_CHAIN");
@@ -33,7 +55,9 @@ contract Configure is ExtraArgsHelper {
                 require(depth <= uint256(FinalityCodec.MAX_BLOCK_DEPTH), "ALLOWED_BLOCK_DEPTH exceeds maximum (65535)");
             }
             allowedFinalityConfig = bytes4(uint32(depth));
-            if (wantSafe) allowedFinalityConfig = allowedFinalityConfig | FinalityCodec.WAIT_FOR_SAFE_FLAG;
+            if (wantSafe) {
+                allowedFinalityConfig = allowedFinalityConfig | FinalityCodec.WAIT_FOR_SAFE_FLAG;
+            }
             if (allowedFinalityConfig == FinalityCodec.WAIT_FOR_FINALITY_FLAG) {
                 finalityHint = "BLOCK_DEPTH=DEFAULT";
                 configDesc = "default finality";
@@ -146,6 +170,7 @@ contract Configure is ExtraArgsHelper {
             )
         );
         receiver.setAllowedFinalityConfig(sourceConfig.chainSelector, allowedFinalityConfig);
+
         console.log(
             string.concat(
                 unicode"✅ Allowed finality config set to ",
@@ -156,6 +181,8 @@ contract Configure is ExtraArgsHelper {
                 helperConfig.getChainName(sourceChainId)
             )
         );
+
+        bool ccvsConfigured = _setCCVs(receiver, sourceConfig.chainSelector);
 
         vm.stopBroadcast();
 
@@ -181,9 +208,28 @@ contract Configure is ExtraArgsHelper {
                 helperConfig.getChainName(sourceChainId)
             )
         );
+        // Build a CCV hint for the suggested send commands. When CCVs were configured on the
+        // receiver, the sender should pass CCV_ADDRESSES (source-chain verifiers) or the message
+        // may be stuck at verification (the send script logs a warning if CCV_ADDRESSES is unset).
+        // Use a placeholder since Configure only knows the destination-chain custom CCV, not the
+        // source-chain entry addresses.
+        string memory ccvHint = "";
+        if (ccvsConfigured) {
+            ccvHint = string.concat(
+                "CCV_ADDRESSES=<", sourceChainName, "_DEFAULT_CCV_RESOLVER>,<", sourceChainName, "_CUSTOM_CCV> "
+            );
+        }
+
         console.log("");
         console.log("** Next Step: Send Messages **");
         console.log("");
+        if (ccvsConfigured) {
+            console.log(unicode"⚠️ Receiver CCVs were configured — pass CCV_ADDRESSES when sending");
+            console.log(
+                unicode"   (source-chain Default CCV Resolver and/or Custom CCV), or the message may be stuck at verification."
+            );
+            console.log("");
+        }
         console.log("Send a message paying with LINK:");
         console.log(
             string.concat(
@@ -193,7 +239,9 @@ contract Configure is ExtraArgsHelper {
                 destChainName,
                 " FEE_TOKEN=LINK GAS_LIMIT=200000 ",
                 finalityHint,
-                " MESSAGE='Hello World From Foundry Script for CCIP 2.0!'",
+                " ",
+                ccvHint,
+                "MESSAGE='Hello World From Foundry Script for CCIP 2.0!'",
                 " forge script foundry/scripts/tutorials/send-arbitrary-data/interact/SendMessage.s.sol:SendMessage --account $KEYSTORE_NAME --broadcast -vv"
             )
         );
@@ -207,7 +255,9 @@ contract Configure is ExtraArgsHelper {
                 destChainName,
                 " GAS_LIMIT=200000 ",
                 finalityHint,
-                " MESSAGE='Hello World From Foundry Script for CCIP 2.0!'",
+                " ",
+                ccvHint,
+                "MESSAGE='Hello World From Foundry Script for CCIP 2.0!'",
                 " forge script foundry/scripts/tutorials/send-arbitrary-data/interact/SendMessage.s.sol:SendMessage --account $KEYSTORE_NAME --broadcast -vv"
             )
         );

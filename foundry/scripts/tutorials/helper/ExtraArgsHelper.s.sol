@@ -24,10 +24,44 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// lane's) allowed finality config and the receiver's allowed finality config before
 /// encoding the final extraArgs bytes.
 ///
+/// Additionally, the helper queries the receiver's required/optional CCV configuration
+/// (exposed via `getCCVsAndFinalityConfig`) and emits an informational warning when the
+/// receiver has custom CCV requirements. This is a WARNING rather than a hard revert because
+/// the receiver's required CCVs are destination-chain addresses while `CCV_ADDRESSES` lists
+/// source-chain entry addresses — a direct comparison cannot determine whether the supplied
+/// CCVs will satisfy the receiver's policy (the source→destination mapping is performed
+/// off-chain by the executor). The warning alerts the sender to a potential `RequiredCCVMissing`
+/// / `OptionalCCVQuorumNotReached` failure that would leave the message stuck at verification.
+/// When the receiver has no custom CCVs the check is a no-op.
+///
 /// @dev Uses Foundry fork-switching (vm.createFork / vm.selectFork) to query the
 ///      destination chain for the receiver constraint. The source fork is always restored
 ///      after the destination query.
 abstract contract ExtraArgsHelper is Script {
+    struct _BuildParams {
+        address sourceRouter;
+        uint64 destChainSelector;
+        uint64 sourceChainSelector;
+        address sender;
+        address receiver;
+        string destRpcUrl;
+        uint32 gasLimit;
+        bytes4 requestedFinalityConfig;
+        address[] ccvs;
+        bytes[] ccvArgs;
+    }
+
+    /// @dev Captured receiver CCV + finality configuration from `getCCVsAndFinalityConfig`.
+    ///      `hasConstraint` is false when the receiver is an EOA or does not implement the
+    ///      V2 interface, in which case all CCV/finality fields are zeroed/empty.
+    struct _ReceiverConfig {
+        bool hasConstraint;
+        address[] requiredCcvs;
+        address[] optionalCcvs;
+        uint8 optionalThreshold;
+        bytes4 allowedFinalityConfig;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
@@ -65,6 +99,10 @@ abstract contract ExtraArgsHelper is Script {
     /// @param requestedFinalityConfig Finality config encoded via FinalityCodec
     ///                                (bytes4(0) = WAIT_FOR_FINALITY_FLAG = default full finality).
     /// @return extraArgs              ABI-encoded extraArgs bytes ready to pass into ccipSend.
+    ///
+    /// CCV env vars (optional):
+    ///   CCV_ADDRESSES — comma-separated CCV addresses (unset/empty → lane defaults).
+    ///   CCV_ARGS      — comma-separated hex blobs, one per CCV (unset/empty → empty args).
     function buildExtraArgs(
         address sourceRouter,
         uint64 destChainSelector,
@@ -76,41 +114,98 @@ abstract contract ExtraArgsHelper is Script {
         uint32 gasLimit,
         bytes4 requestedFinalityConfig
     ) internal returns (bytes memory) {
+        _BuildParams memory p = _BuildParams({
+            sourceRouter: sourceRouter,
+            destChainSelector: destChainSelector,
+            sourceChainSelector: sourceChainSelector,
+            sender: sender,
+            receiver: receiver,
+            destRpcUrl: destRpcUrl,
+            gasLimit: gasLimit,
+            requestedFinalityConfig: requestedFinalityConfig,
+            ccvs: _parseCcvs(),
+            ccvArgs: _parseCcvArgs()
+        });
+
         // ── 1. Default finality early exit ──────────────────────────────────
-        if (requestedFinalityConfig == FinalityCodec.WAIT_FOR_FINALITY_FLAG) {
+        if (p.requestedFinalityConfig == FinalityCodec.WAIT_FOR_FINALITY_FLAG) {
+            // Default finality is always permitted, so the finality check is skipped. CCVs are
+            // still validated against the receiver's required/optional config — a receiver with
+            // custom required CCVs would cause the message to be stuck at verification if those
+            // CCVs are not supplied, regardless of the finality mode.
+            _queryAndEnsureReceiverCcvs(p);
             console.log(
                 string.concat(
                     unicode"✅ Using default finality (BLOCK_DEPTH=DEFAULT). V3 extraArgs (gasLimit=",
-                    vm.toString(uint256(gasLimit)),
+                    vm.toString(uint256(p.gasLimit)),
                     ", finalityConfig=0x00000000)."
                 )
             );
-            return ExtraArgsCodec._getBasicEncodedExtraArgsV3(gasLimit, FinalityCodec.WAIT_FOR_FINALITY_FLAG);
+            return _encodeV3ExtraArgs(p.gasLimit, FinalityCodec.WAIT_FOR_FINALITY_FLAG, p.ccvs, p.ccvArgs);
         }
 
         if (token != address(0)) {
-            return _buildWithToken(
-                sourceRouter,
-                destChainSelector,
-                token,
-                sourceChainSelector,
-                sender,
-                receiver,
-                destRpcUrl,
-                gasLimit,
-                requestedFinalityConfig
+            return _buildWithToken(token, p);
+        }
+        return _buildMessageOnly(p);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CCV validation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @dev Queries the receiver's CCV + finality config and emits an informational warning when
+    ///      the receiver has custom required/optional CCVs and the sender has not passed
+    ///      `CCV_ADDRESSES`. This is a WARNING, not a hard revert, because:
+    ///
+    ///      - The receiver's required/optional CCVs are DESTINATION-chain addresses (set via
+    ///        `setCCVs` / `REQUIRED_CCV_ADDRESSES` in Configure).
+    ///      - `CCV_ADDRESSES` lists SOURCE-chain entry addresses (Default CCV Resolver and/or
+    ///        source Custom CCV).
+    ///      - These are different contracts on different chains, so a direct address comparison
+    ///        cannot determine whether the supplied source-chain CCVs will satisfy the receiver's
+    ///        destination-chain requirements. The source→destination CCV mapping is performed
+    ///        OFF-CHAIN by the executor (e.g. Symbiotic maps source Custom CCV → destination
+    ///        Custom CCV automatically).
+    ///      - The OffRamp's `RequiredCCVMissing` / `OptionalCCVQuorumNotReached` checks compare
+    ///        destination-chain addresses (supplied by the executor) against the receiver's
+    ///        destination-chain required list — there is no on-chain way to replicate this from
+    ///        the source chain.
+    ///
+    ///      Therefore this helper can only warn that a mismatch MAY cause the message to be stuck
+    ///      at verification; it cannot definitively validate the CCV policy pre-flight. When the
+    ///      receiver has no custom CCVs the check is a no-op.
+    function _queryAndEnsureReceiverCcvs(_BuildParams memory p) internal {
+        _ReceiverConfig memory rc = _queryReceiverConfig(p.destRpcUrl, p.receiver, p.sourceChainSelector, p.sender);
+        if (!rc.hasConstraint) return;
+        _warnReceiverCcvPolicy(rc, p.ccvs);
+    }
+
+    /// @dev Emits an informational warning when the receiver has custom CCV requirements. See
+    ///      `_queryAndEnsureReceiverCcvs` for why this is a warning rather than a hard revert.
+    ///      No-op when the receiver has no custom required/optional CCVs.
+    function _warnReceiverCcvPolicy(_ReceiverConfig memory rc, address[] memory providedCcvs) internal pure {
+        if (rc.requiredCcvs.length == 0 && rc.optionalThreshold == 0) return;
+
+        if (providedCcvs.length == 0) {
+            console.log(
+                string.concat(
+                    unicode"⚠️ Receiver has custom CCV requirements but CCV_ADDRESSES is not set. The executor will ",
+                    "only supply lane default CCVs, which may not satisfy the receiver's required/optional CCV policy. ",
+                    "If the message is stuck at verification, set CCV_ADDRESSES to the source-chain Default CCV ",
+                    "Resolver and/or source Custom CCV that correspond to the receiver's required CCVs."
+                )
+            );
+        } else {
+            console.log(
+                string.concat(
+                    unicode"ℹ️ Receiver has custom CCV requirements. CCV_ADDRESSES was provided — ensure the source-chain ",
+                    unicode"CCVs you passed correspond to the receiver's required/optional CCVs (the source→destination CCV ",
+                    "mapping is performed off-chain by the executor). If the message is stuck at verification, verify ",
+                    "the CCV alignment per the tutorial's Configure vs Send table."
+                )
             );
         }
-        return _buildMessageOnly(
-            sourceRouter,
-            destChainSelector,
-            sourceChainSelector,
-            sender,
-            receiver,
-            destRpcUrl,
-            gasLimit,
-            requestedFinalityConfig
-        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -124,61 +219,101 @@ abstract contract ExtraArgsHelper is Script {
     ///   - If pool does NOT implement getAllowedFinalityConfig() → pool has no finality constraint,
     ///     but the lane may still be v2.0 (e.g. CCTP/USDCTokenPool which handles finality via
     ///     Circle attestation). Probe router.getFee() with V3 extraArgs to determine lane version.
-    function _buildWithToken(
-        address sourceRouter,
-        uint64 destChainSelector,
-        address token,
-        uint64 sourceChainSelector,
-        address sender,
-        address receiver,
-        string memory destRpcUrl,
+    function _encodeV3ExtraArgs(
         uint32 gasLimit,
-        bytes4 requestedFinalityConfig
-    ) private returns (bytes memory) {
+        bytes4 requestedFinalityConfig,
+        address[] memory ccvs,
+        bytes[] memory ccvArgs
+    ) private pure returns (bytes memory) {
+        if (ccvs.length == 0) {
+            return ExtraArgsCodec._getBasicEncodedExtraArgsV3(gasLimit, requestedFinalityConfig);
+        }
+
+        if (ccvArgs.length == 0) {
+            ccvArgs = new bytes[](ccvs.length);
+        }
+        require(ccvs.length == ccvArgs.length, "CCV/ccvArgs length mismatch");
+
+        return ExtraArgsCodec._encodeGenericExtraArgsV3(
+            ExtraArgsCodec.GenericExtraArgsV3({
+                gasLimit: gasLimit,
+                requestedFinalityConfig: requestedFinalityConfig,
+                ccvs: ccvs,
+                ccvArgs: ccvArgs,
+                executor: Client.NO_EXECUTION_ADDRESS,
+                executorArgs: "",
+                tokenReceiver: "",
+                tokenArgs: ""
+            })
+        );
+    }
+
+    /// @dev When V3 getFee fails with custom CCVs, distinguish invalid CCV config from pre-v2.0 lanes.
+    function _revertIfCustomCcvsRejected(_BuildParams memory p, Client.EVM2AnyMessage memory probeMsg) private view {
+        bytes memory basicV3 =
+            _encodeV3ExtraArgs(p.gasLimit, p.requestedFinalityConfig, new address[](0), new bytes[](0));
+        probeMsg.extraArgs = basicV3;
+        try IRouterClient(p.sourceRouter).getFee(p.destChainSelector, probeMsg) {
+            revert(
+                "CCV_ADDRESSES rejected by lane. Each address must be a source-chain CCV entry "
+                "contract that implements getOutboundImplementation (not an implementation address). "
+                "Omit CCV_ADDRESSES to use lane defaults, or pass CCV router/proxy addresses only."
+            );
+        } catch {
+            revert("CCV_ADDRESSES set but lane rejected V3 extraArgs. Verify this is a v2.0+ lane.");
+        }
+    }
+
+    function _buildWithToken(address token, _BuildParams memory p) private returns (bytes memory) {
         (bool poolHasConstraint, bytes4 poolAllowedFinalityConfig) =
-            _queryPoolAllowedFinalityConfig(sourceRouter, destChainSelector, token);
+            _queryPoolAllowedFinalityConfig(p.sourceRouter, p.destChainSelector, token);
 
         if (!poolHasConstraint) {
             // Pool does not implement getAllowedFinalityConfig() — no pool-side finality
             // constraint. Probe V3 extraArgs via router.getFee() to confirm lane version.
             console.log("Token pool ALLOWED_FINALITY_CONFIG: undefined (pool has no constraint or pre-v2.0 pool).");
-            bytes memory v3Args = ExtraArgsCodec._getBasicEncodedExtraArgsV3(gasLimit, requestedFinalityConfig);
+            bytes memory v3Args = _encodeV3ExtraArgs(p.gasLimit, p.requestedFinalityConfig, p.ccvs, p.ccvArgs);
             Client.EVM2AnyMessage memory probeMsg = Client.EVM2AnyMessage({
-                receiver: abi.encode(receiver),
+                receiver: abi.encode(p.receiver),
                 data: "",
                 tokenAmounts: new Client.EVMTokenAmount[](0),
                 extraArgs: v3Args,
                 feeToken: address(0)
             });
-            try IRouterClient(sourceRouter).getFee(destChainSelector, probeMsg) {
-                // Lane is v2.0+, no pool constraint — skip pool validation, check receiver only.
+            try IRouterClient(p.sourceRouter).getFee(p.destChainSelector, probeMsg) {
+                // Lane is v2.0+, no pool constraint — check receiver finality + warn on CCVs.
                 console.log("V3 extraArgs accepted by lane (v2.0+ lane, no pool constraint).");
-                (bool rcvHasConstraint, bytes4 rcvAllowed) =
-                    _queryReceiverAllowedFinalityConfig(destRpcUrl, receiver, sourceChainSelector, sender);
-                if (rcvHasConstraint) {
-                    FinalityCodec._ensureRequestedFinalityAllowed(requestedFinalityConfig, rcvAllowed);
+                _ReceiverConfig memory rc =
+                    _queryReceiverConfig(p.destRpcUrl, p.receiver, p.sourceChainSelector, p.sender);
+                if (rc.hasConstraint) {
+                    FinalityCodec._ensureRequestedFinalityAllowed(p.requestedFinalityConfig, rc.allowedFinalityConfig);
+                    _warnReceiverCcvPolicy(rc, p.ccvs);
                 }
                 console.log(
                     string.concat(
                         unicode"✅ Using V3 extraArgs with FTF (gasLimit=",
-                        vm.toString(uint256(gasLimit)),
+                        vm.toString(uint256(p.gasLimit)),
                         ", finalityConfig=",
-                        _fmtFinalityConfig(requestedFinalityConfig),
+                        _fmtFinalityConfig(p.requestedFinalityConfig),
                         ")."
                     )
                 );
                 return v3Args;
-            } catch {}
+            } catch {
+                if (p.ccvs.length > 0) {
+                    _revertIfCustomCcvsRejected(p, probeMsg);
+                }
+            }
             // V3 rejected — pre-v2.0 lane.
             console.log(
                 string.concat(
                     unicode"✅ Pre-v2.0 lane. Using V2 extraArgs (gasLimit=",
-                    vm.toString(uint256(gasLimit)),
+                    vm.toString(uint256(p.gasLimit)),
                     ", allowOutOfOrderExecution=true)."
                 )
             );
             return Client._argsToBytes(
-                Client.GenericExtraArgsV2({gasLimit: uint256(gasLimit), allowOutOfOrderExecution: true})
+                Client.GenericExtraArgsV2({gasLimit: uint256(p.gasLimit), allowOutOfOrderExecution: true})
             );
         }
 
@@ -187,39 +322,31 @@ abstract contract ExtraArgsHelper is Script {
         );
 
         // Reverts with FinalityCodec.InvalidRequestedFinality if not permitted.
-        FinalityCodec._ensureRequestedFinalityAllowed(requestedFinalityConfig, poolAllowedFinalityConfig);
+        FinalityCodec._ensureRequestedFinalityAllowed(p.requestedFinalityConfig, poolAllowedFinalityConfig);
 
-        (bool hasConstraint, bytes4 receiverAllowed) =
-            _queryReceiverAllowedFinalityConfig(destRpcUrl, receiver, sourceChainSelector, sender);
-        if (hasConstraint) {
-            FinalityCodec._ensureRequestedFinalityAllowed(requestedFinalityConfig, receiverAllowed);
+        _ReceiverConfig memory receiverCfg =
+            _queryReceiverConfig(p.destRpcUrl, p.receiver, p.sourceChainSelector, p.sender);
+        if (receiverCfg.hasConstraint) {
+            FinalityCodec._ensureRequestedFinalityAllowed(p.requestedFinalityConfig, receiverCfg.allowedFinalityConfig);
+            _warnReceiverCcvPolicy(receiverCfg, p.ccvs);
         }
 
         console.log(
             string.concat(
                 unicode"✅ Using V3 extraArgs with FTF (gasLimit=",
-                vm.toString(uint256(gasLimit)),
+                vm.toString(uint256(p.gasLimit)),
                 ", finalityConfig=",
-                _fmtFinalityConfig(requestedFinalityConfig),
+                _fmtFinalityConfig(p.requestedFinalityConfig),
                 ")."
             )
         );
-        return ExtraArgsCodec._getBasicEncodedExtraArgsV3(gasLimit, requestedFinalityConfig);
+        return _encodeV3ExtraArgs(p.gasLimit, p.requestedFinalityConfig, p.ccvs, p.ccvArgs);
     }
 
     /// @dev Message-only path: detect lane version via router.getFee() probe, validate, encode.
-    function _buildMessageOnly(
-        address sourceRouter,
-        uint64 destChainSelector,
-        uint64 sourceChainSelector,
-        address sender,
-        address receiver,
-        string memory destRpcUrl,
-        uint32 gasLimit,
-        bytes4 requestedFinalityConfig
-    ) private returns (bytes memory) {
+    function _buildMessageOnly(_BuildParams memory p) private returns (bytes memory) {
         Client.EVM2AnyMessage memory probeMsg = Client.EVM2AnyMessage({
-            receiver: abi.encode(receiver),
+            receiver: abi.encode(p.receiver),
             data: abi.encode(""),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
@@ -227,48 +354,52 @@ abstract contract ExtraArgsHelper is Script {
         });
 
         // ── Probe V3 ────────────────────────────────────────────────────────
-        bytes memory v3Args = ExtraArgsCodec._getBasicEncodedExtraArgsV3(gasLimit, requestedFinalityConfig);
+        bytes memory v3Args = _encodeV3ExtraArgs(p.gasLimit, p.requestedFinalityConfig, p.ccvs, p.ccvArgs);
         probeMsg.extraArgs = v3Args;
 
-        try IRouterClient(sourceRouter).getFee(destChainSelector, probeMsg) {
+        try IRouterClient(p.sourceRouter).getFee(p.destChainSelector, probeMsg) {
             console.log("V3 extraArgs accepted by lane.");
 
-            (bool hasConstraint, bytes4 receiverAllowed) =
-                _queryReceiverAllowedFinalityConfig(destRpcUrl, receiver, sourceChainSelector, sender);
-            if (hasConstraint) {
-                FinalityCodec._ensureRequestedFinalityAllowed(requestedFinalityConfig, receiverAllowed);
+            _ReceiverConfig memory rc = _queryReceiverConfig(p.destRpcUrl, p.receiver, p.sourceChainSelector, p.sender);
+            if (rc.hasConstraint) {
+                FinalityCodec._ensureRequestedFinalityAllowed(p.requestedFinalityConfig, rc.allowedFinalityConfig);
+                _warnReceiverCcvPolicy(rc, p.ccvs);
             }
 
             console.log(
                 string.concat(
                     unicode"✅ Using V3 extraArgs with FTF (gasLimit=",
-                    vm.toString(uint256(gasLimit)),
+                    vm.toString(uint256(p.gasLimit)),
                     ", finalityConfig=",
-                    _fmtFinalityConfig(requestedFinalityConfig),
+                    _fmtFinalityConfig(p.requestedFinalityConfig),
                     ")."
                 )
             );
             return v3Args;
-        } catch {}
+        } catch {
+            if (p.ccvs.length > 0) {
+                _revertIfCustomCcvsRejected(p, probeMsg);
+            }
+        }
 
         // ── V2 fallback ─────────────────────────────────────────────────────
         bytes memory v2Args = Client._argsToBytes(
-            Client.GenericExtraArgsV2({gasLimit: uint256(gasLimit), allowOutOfOrderExecution: true})
+            Client.GenericExtraArgsV2({gasLimit: uint256(p.gasLimit), allowOutOfOrderExecution: true})
         );
         probeMsg.extraArgs = v2Args;
 
-        try IRouterClient(sourceRouter).getFee(destChainSelector, probeMsg) {
+        try IRouterClient(p.sourceRouter).getFee(p.destChainSelector, probeMsg) {
             console.log(
                 string.concat(
                     "Pre-v2.0 lane detected. Using V2 extraArgs (gasLimit=",
-                    vm.toString(uint256(gasLimit)),
+                    vm.toString(uint256(p.gasLimit)),
                     ", allowOutOfOrderExecution=true)."
                 )
             );
             console.log(
                 string.concat(
                     "Note: requested finality config ",
-                    _fmtFinalityConfig(requestedFinalityConfig),
+                    _fmtFinalityConfig(p.requestedFinalityConfig),
                     " cannot be enforced with V2 extraArgs."
                 )
             );
@@ -303,42 +434,82 @@ abstract contract ExtraArgsHelper is Script {
         }
     }
 
-    /// @dev Switches to a temporary destination-chain fork, queries the receiver's
-    ///      allowed finality config, then restores the source fork.
-    function _queryReceiverAllowedFinalityConfig(
+    /// @dev Switches to a temporary destination-chain fork, queries the receiver's CCV and
+    ///      finality configuration via `getCCVsAndFinalityConfig`, then restores the source fork.
+    ///
+    ///      Returns `_ReceiverConfig({hasConstraint: false, ...})` when the receiver is an EOA
+    ///      or does not implement the V2 interface, so callers can uniformly skip validation.
+    function _queryReceiverConfig(
         string memory destRpcUrl,
         address receiver,
         uint64 sourceChainSelector,
         address sender
-    ) private returns (bool hasConstraint, bytes4 receiverAllowedFinalityConfig) {
+    ) private returns (_ReceiverConfig memory rc) {
         uint256 sourceForkId = vm.activeFork();
         uint256 destForkId = vm.createFork(destRpcUrl);
         vm.selectFork(destForkId);
 
         if (receiver.code.length == 0) {
-            console.log("Receiver is an EOA \xe2\x80\x94 no receiver constraint.");
+            console.log(unicode"Receiver is an EOA — no receiver constraint.");
             vm.selectFork(sourceForkId);
-            return (false, bytes4(0));
+            return rc; // hasConstraint = false, all fields zeroed/empty
         }
 
         try IAny2EVMMessageReceiverV2(receiver)
             .getCCVsAndFinalityConfig(sourceChainSelector, abi.encode(sender)) returns (
-            address[] memory, address[] memory, uint8, bytes4 allowedFinalityConfig
+            address[] memory requiredCcvs,
+            address[] memory optionalCcvs,
+            uint8 optionalThreshold,
+            bytes4 allowedFinalityConfig
         ) {
             console.log(
                 string.concat("Receiver contract ALLOWED_FINALITY_CONFIG: ", _fmtFinalityConfig(allowedFinalityConfig))
             );
-            hasConstraint = true;
-            receiverAllowedFinalityConfig = allowedFinalityConfig;
+            if (requiredCcvs.length > 0) {
+                console.log(
+                    string.concat(
+                        "Receiver required CCVs (",
+                        vm.toString(requiredCcvs.length),
+                        "):",
+                        _formatAddressList(requiredCcvs)
+                    )
+                );
+            }
+            if (optionalCcvs.length > 0) {
+                console.log(
+                    string.concat(
+                        "Receiver optional CCVs (threshold ",
+                        vm.toString(uint256(optionalThreshold)),
+                        " of ",
+                        vm.toString(optionalCcvs.length),
+                        "):",
+                        _formatAddressList(optionalCcvs)
+                    )
+                );
+            }
+            rc = _ReceiverConfig({
+                hasConstraint: true,
+                requiredCcvs: requiredCcvs,
+                optionalCcvs: optionalCcvs,
+                optionalThreshold: optionalThreshold,
+                allowedFinalityConfig: allowedFinalityConfig
+            });
         } catch {
             console.log(
-                "Receiver contract does not implement getCCVsAndFinalityConfig \xe2\x80\x94 no receiver constraint."
+                unicode"Receiver contract does not implement getCCVsAndFinalityConfig — no receiver constraint."
             );
-            hasConstraint = false;
-            receiverAllowedFinalityConfig = bytes4(0);
         }
 
         vm.selectFork(sourceForkId);
+    }
+
+    /// @dev Renders an address array as a single concatenated string of " addr1 addr2 ...".
+    function _formatAddressList(address[] memory addrs) private pure returns (string memory) {
+        string memory out = "";
+        for (uint256 i = 0; i < addrs.length; i++) {
+            out = string.concat(out, " ", vm.toString(addrs[i]));
+        }
+        return out;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -401,6 +572,118 @@ abstract contract ExtraArgsHelper is Script {
         if (blockDepth == 0) return FinalityCodec.WAIT_FOR_FINALITY_FLAG;
         require(blockDepth <= FinalityCodec.MAX_BLOCK_DEPTH, "BLOCK_DEPTH exceeds maximum allowed block depth");
         return FinalityCodec._encodeBlockDepth(uint16(blockDepth));
+    }
+
+    /// @dev Reads CCV_ADDRESSES env var (comma-separated). Unset or empty → empty array (lane defaults).
+    function _parseCcvs() internal view returns (address[] memory) {
+        return _parseAddressCsv(vm.envOr("CCV_ADDRESSES", string("")));
+    }
+
+    /// @dev Reads CCV_ARGS env var (comma-separated hex). Unset or empty → empty array (empty args per CCV).
+    function _parseCcvArgs() internal view returns (bytes[] memory) {
+        return _parseHexBytesCsv(vm.envOr("CCV_ARGS", string("")));
+    }
+
+    /// @dev Reads REQUIRED_CCV_ADDRESSES env var for receiver configuration. Unset or empty → empty array.
+    function _parseRequiredCcvs() internal view returns (address[] memory) {
+        return _parseAddressCsv(vm.envOr("REQUIRED_CCV_ADDRESSES", string("")));
+    }
+
+    /// @dev Reads OPTIONAL_CCV_ADDRESSES env var for receiver configuration. Unset or empty → empty array.
+    function _parseOptionalCcvs() internal view returns (address[] memory) {
+        return _parseAddressCsv(vm.envOr("OPTIONAL_CCV_ADDRESSES", string("")));
+    }
+
+    /// @dev Reads OPTIONAL_CCV_THRESHOLD env var for receiver configuration. Unset → 0.
+    function _parseOptionalCcvThreshold() internal view returns (uint8) {
+        return uint8(vm.envOr("OPTIONAL_CCV_THRESHOLD", uint256(0)));
+    }
+
+    /// @dev Parses a comma-separated list of addresses. Empty string → empty array.
+    function _parseAddressCsv(string memory csv) private pure returns (address[] memory) {
+        bytes memory csvBytes = bytes(csv);
+        if (csvBytes.length == 0) return new address[](0);
+
+        uint256 segmentCount = _csvSegmentCount(csvBytes);
+        address[] memory addresses = new address[](segmentCount);
+        uint256 idx = 0;
+        uint256 i = 0;
+        while (i <= csvBytes.length) {
+            uint256 start = i;
+            while (i < csvBytes.length && csvBytes[i] != 0x2C) i++;
+            (uint256 trimStart, uint256 trimEnd) = _trimSegmentBounds(csvBytes, start, i);
+            if (trimEnd > trimStart) {
+                addresses[idx++] = vm.parseAddress(_substring(csvBytes, trimStart, trimEnd));
+            }
+            if (i >= csvBytes.length) break;
+            i++;
+        }
+        if (idx != segmentCount) {
+            address[] memory trimmed = new address[](idx);
+            for (uint256 j = 0; j < idx; j++) {
+                trimmed[j] = addresses[j];
+            }
+            return trimmed;
+        }
+        return addresses;
+    }
+
+    /// @dev Parses a comma-separated list of hex byte strings. Empty string → empty array.
+    function _parseHexBytesCsv(string memory csv) private pure returns (bytes[] memory) {
+        bytes memory csvBytes = bytes(csv);
+        if (csvBytes.length == 0) return new bytes[](0);
+
+        uint256 segmentCount = _csvSegmentCount(csvBytes);
+        bytes[] memory args = new bytes[](segmentCount);
+        uint256 idx = 0;
+        uint256 i = 0;
+        while (i <= csvBytes.length) {
+            uint256 start = i;
+            while (i < csvBytes.length && csvBytes[i] != 0x2C) i++;
+            (uint256 trimStart, uint256 trimEnd) = _trimSegmentBounds(csvBytes, start, i);
+            if (trimEnd > trimStart) {
+                string memory segment = _substring(csvBytes, trimStart, trimEnd);
+                args[idx++] = keccak256(bytes(segment)) == keccak256("0x") ? bytes("") : vm.parseBytes(segment);
+            }
+            if (i >= csvBytes.length) break;
+            i++;
+        }
+        if (idx != segmentCount) {
+            bytes[] memory trimmed = new bytes[](idx);
+            for (uint256 j = 0; j < idx; j++) {
+                trimmed[j] = args[j];
+            }
+            return trimmed;
+        }
+        return args;
+    }
+
+    function _csvSegmentCount(bytes memory csvBytes) private pure returns (uint256) {
+        if (csvBytes.length == 0) return 0;
+        uint256 count = 1;
+        for (uint256 i = 0; i < csvBytes.length; i++) {
+            if (csvBytes[i] == 0x2C) count++;
+        }
+        return count;
+    }
+
+    function _trimSegmentBounds(bytes memory csvBytes, uint256 start, uint256 end)
+        private
+        pure
+        returns (uint256 trimStart, uint256 trimEnd)
+    {
+        trimStart = start;
+        trimEnd = end;
+        while (trimStart < trimEnd && csvBytes[trimStart] == 0x20) trimStart++;
+        while (trimEnd > trimStart && csvBytes[trimEnd - 1] == 0x20) trimEnd--;
+    }
+
+    function _substring(bytes memory data, uint256 start, uint256 end) private pure returns (string memory) {
+        bytes memory slice = new bytes(end - start);
+        for (uint256 i = 0; i < end - start; i++) {
+            slice[i] = data[start + i];
+        }
+        return string(slice);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
