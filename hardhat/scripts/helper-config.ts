@@ -61,6 +61,18 @@ const rawConfigData = {
     explorerUrl: "https://explorer-sepolia.inkonchain.com",
     nativeCurrencySymbol: "INK",
   },
+  ARBITRUM_SEPOLIA: {
+    chainId: 421614,
+    chainSelector: "3478487238524512106",
+    router: "0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165",
+    link: "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E",
+    ccipBnM: "0x0000000000000000000000000000000000000000",
+    usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+    confirmations: 2,
+    chainName: "Arbitrum Sepolia",
+    explorerUrl: "https://sepolia.arbiscan.io",
+    nativeCurrencySymbol: "ETH",
+  },
   MANTLE_SEPOLIA: {
     chainId: 5003,
     chainSelector: "8236463271206331221",

@@ -25,6 +25,7 @@ contract HelperConfig is Script {
     uint256 public constant ZERO_G_TESTNET_CHAIN_ID = 16602;
     uint256 public constant PLUME_TESTNET_CHAIN_ID = 98867;
     uint256 public constant INK_SEPOLIA_CHAIN_ID = 763373;
+    uint256 public constant ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
     uint256 public constant MANTLE_SEPOLIA_CHAIN_ID = 5003;
 
     // Deployed contract addresses
@@ -36,6 +37,7 @@ contract HelperConfig is Script {
         _initializeDeployedContract(ZERO_G_TESTNET_CHAIN_ID);
         _initializeDeployedContract(PLUME_TESTNET_CHAIN_ID);
         _initializeDeployedContract(INK_SEPOLIA_CHAIN_ID);
+        _initializeDeployedContract(ARBITRUM_SEPOLIA_CHAIN_ID);
         _initializeDeployedContract(MANTLE_SEPOLIA_CHAIN_ID);
     }
 
@@ -109,6 +111,22 @@ contract HelperConfig is Script {
         return inkSepoliaConfig;
     }
 
+    function getArbitrumSepoliaConfig() public pure returns (NetworkConfig memory) {
+        NetworkConfig memory arbitrumSepoliaConfig = NetworkConfig({
+            chainSelector: 3478487238524512106,
+            router: 0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165,
+            link: 0xb1D4538B4571d411F07960EF2838Ce337FE1E80E,
+            ccipBnM: 0x0000000000000000000000000000000000000000,
+            usdc: 0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d,
+            confirmations: 2,
+            chainName: "Arbitrum Sepolia",
+            chainNameIdentifier: "ARBITRUM_SEPOLIA",
+            explorerUrl: "https://sepolia.arbiscan.io",
+            nativeCurrencySymbol: "ETH"
+        });
+        return arbitrumSepoliaConfig;
+    }
+
     function getMantleSepoliaConfig() public pure returns (NetworkConfig memory) {
         NetworkConfig memory mantleSepoliaConfig = NetworkConfig({
             chainSelector: 8236463271206331221,
@@ -134,6 +152,8 @@ contract HelperConfig is Script {
             return getPlumeTestnetConfig();
         } else if (chainId == INK_SEPOLIA_CHAIN_ID) {
             return getInkSepoliaConfig();
+        } else if (chainId == ARBITRUM_SEPOLIA_CHAIN_ID) {
+            return getArbitrumSepoliaConfig();
         } else if (chainId == MANTLE_SEPOLIA_CHAIN_ID) {
             return getMantleSepoliaConfig();
         } else {
@@ -159,6 +179,9 @@ contract HelperConfig is Script {
         }
         if (nameHash == keccak256(abi.encodePacked(getInkSepoliaConfig().chainNameIdentifier))) {
             return INK_SEPOLIA_CHAIN_ID;
+        }
+        if (nameHash == keccak256(abi.encodePacked(getArbitrumSepoliaConfig().chainNameIdentifier))) {
+            return ARBITRUM_SEPOLIA_CHAIN_ID;
         }
         if (nameHash == keccak256(abi.encodePacked(getMantleSepoliaConfig().chainNameIdentifier))) {
             return MANTLE_SEPOLIA_CHAIN_ID;
