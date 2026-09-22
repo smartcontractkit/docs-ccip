@@ -66,7 +66,7 @@ const rawConfigData = {
     chainSelector: "3478487238524512106",
     router: "0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165",
     link: "0xb1D4538B4571d411F07960EF2838Ce337FE1E80E",
-    ccipBnM: "0x0000000000000000000000000000000000000000",
+    ccipBnM: "0x686325E21F55c64Bf724047E0fe7C454D6faD37D",
     usdc: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
     confirmations: 2,
     chainName: "Arbitrum Sepolia",
